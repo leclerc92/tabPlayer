@@ -198,8 +198,15 @@ struct ContentView: View {
         HSplitView {
             if let song = selectedSong {
                 if let p = song.pdf {
-                    PDFKitView(url: p)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    VStack(spacing: 0) {
+                        PDFKitView(url: p)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                        MetronomeView()
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(.ultraThinMaterial)
+                    }
                 }
                 if let v = song.video {
                     VideoPlayerView(url: v)

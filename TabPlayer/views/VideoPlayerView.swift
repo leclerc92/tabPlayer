@@ -144,7 +144,7 @@ struct VideoPlayerView: View {
             VideoPlayerNSView(player: viewModel.player)
                 .onAppear { viewModel.loadVideo(from: url) }
                 .onChange(of: url) { _, _ in viewModel.loadVideo(from: url) }
-            
+
             VStack(spacing: 12) {
                 // Barre de progression avec zone de boucle
                 LoopProgressBar(
@@ -155,7 +155,7 @@ struct VideoPlayerView: View {
                 )
                 .frame(height: 8)
                 .padding(.horizontal, 20)
-                
+
                 // Contrôles de boucle
                 loopControls
             }
