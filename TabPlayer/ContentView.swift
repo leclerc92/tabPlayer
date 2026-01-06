@@ -33,7 +33,9 @@ struct ContentView: View {
     @State private var showErrorAlert = false
     @State private var errorMessage = ""
     @State private var isScanning = false
-    
+    @State private var selectedArtistForNewSong: Artiste?
+    @State private var showingAddArtistSheet = false
+
     var filteredArtistes: [Artiste] {
         var artists = artistes
 
@@ -85,6 +87,33 @@ struct ContentView: View {
         } detail: {
             detailView
         }
+        .sheet(item: $selectedArtistForNewSong) { artist in
+            AddSongSheet(
+                artist: artist,
+                rootPath: rootFolderURL ?? "",
+                onComplete: { success in
+                    if success {
+                        if let path = rootFolderURL {
+                            artistes = scanLibrary(rootPath: path)
+                        }
+                    }
+                    selectedArtistForNewSong = nil
+                }
+            )
+        }
+        .sheet(isPresented: $showingAddArtistSheet) {
+            AddArtistSheet(
+                rootPath: rootFolderURL ?? "",
+                onComplete: { success in
+                    if success {
+                        if let path = rootFolderURL {
+                            artistes = scanLibrary(rootPath: path)
+                        }
+                    }
+                    showingAddArtistSheet = false
+                }
+            )
+        }
         .onAppear {
             if let path = rootFolderURL {
                 artistes = scanLibrary(rootPath: path)
@@ -122,6 +151,16 @@ struct ContentView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.tertiary)
                     .monospacedDigit()
+
+                // Add artist button
+                Button(action: {
+                    showingAddArtistSheet = true
+                }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .help("Créer un nouvel artiste")
 
                 // Refresh button
                 Button(action: rescanLibrary) {
@@ -186,6 +225,14 @@ struct ContentView: View {
                     }
                 } header: {
                     ArtistHeader(artist: artist, songCount: artist.songs.count)
+                        .contentShape(Rectangle())
+                        .contextMenu {
+                            Button(action: {
+                                selectedArtistForNewSong = artist
+                            }) {
+                                Label("Ajouter un morceau", systemImage: "plus.circle")
+                            }
+                        }
                 }
             }
         }
@@ -362,10 +409,9 @@ struct ContentView: View {
                 
                 // Trier les chansons par titre
                 actualArtiste.songs.sort { $0.title.localizedCompare($1.title) == .orderedAscending }
-                
-                if !actualArtiste.songs.isEmpty {
-                    artistes.append(actualArtiste)
-                }
+
+                // Ajouter l'artiste même s'il n'a pas de morceaux
+                artistes.append(actualArtiste)
             }
             
             // Trier les artistes par nom
