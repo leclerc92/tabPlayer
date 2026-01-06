@@ -13,5 +13,9 @@ struct TabPlayerApp: App {
         WindowGroup {
             ContentView()
         }
+        
+        Settings {
+            SettingView()
+        }
     }
 }
