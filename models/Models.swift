@@ -14,7 +14,7 @@ struct Artiste: Identifiable {
 }
 
 
-struct Song: Identifiable {
+struct Song: Identifiable,Hashable {
     var id: UUID
     var title: String
     var pdf: URL?
