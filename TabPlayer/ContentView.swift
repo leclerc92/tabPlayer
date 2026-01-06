@@ -8,26 +8,69 @@
 import SwiftUI
 import AVKit
 
+enum FilterType: String, CaseIterable {
+    case all = "Tout"
+    case enCours = "En cours"
+    case termine = "Terminé"
+
+    var icon: String {
+        switch self {
+        case .all: return "music.note.list"
+        case .enCours: return "music.note.list"
+        case .termine: return "checkmark.circle.fill"
+        }
+    }
+}
+
 struct ContentView: View {
-    
+
     @AppStorage("rootFolderURL") var rootFolderURL: String?
     @State private var selectedSong: Song? = nil
     @State private var artistes: [Artiste] = []
     @State private var expandedArtists: Set<UUID> = []
     @State private var searchText: String = ""
+    @State private var selectedFilter: FilterType = .all
+    @State private var showErrorAlert = false
+    @State private var errorMessage = ""
+    @State private var isScanning = false
     
     var filteredArtistes: [Artiste] {
-        if searchText.isEmpty {
-            return artistes
+        var artists = artistes
+
+        // Apply status filter first
+        if selectedFilter != .all {
+            artists = artists.compactMap { artist in
+                let filteredSongs = artist.songs.filter { song in
+                    switch selectedFilter {
+                    case .all:
+                        return true
+                    case .enCours:
+                        return song.status == .enCours
+                    case .termine:
+                        return song.status == .termine
+                    }
+                }
+
+                if filteredSongs.isEmpty {
+                    return nil
+                }
+                return Artiste(id: artist.id, name: artist.name, songs: filteredSongs)
+            }
         }
-        return artistes.compactMap { artist in
+
+        // Apply search filter
+        if searchText.isEmpty {
+            return artists
+        }
+
+        return artists.compactMap { artist in
             let matchingSongs = artist.songs.filter {
                 $0.title.localizedCaseInsensitiveContains(searchText)
             }
             let artistMatches = artist.name.localizedCaseInsensitiveContains(searchText)
-            
+
             if artistMatches {
-                return artist // Retourne l'artiste complet si son nom matche
+                return artist
             } else if !matchingSongs.isEmpty {
                 return Artiste(id: artist.id, name: artist.name, songs: matchingSongs)
             }
@@ -47,6 +90,11 @@ struct ContentView: View {
                 artistes = scanLibrary(rootPath: path)
             }
         }
+        .alert("Erreur", isPresented: $showErrorAlert) {
+            Button("OK") { }
+        } message: {
+            Text(errorMessage)
+        }
     }
     
     // MARK: - Sidebar
@@ -60,18 +108,65 @@ struct ContentView: View {
     }
     
     private var sidebarHeader: some View {
-        HStack {
-            Text("Bibliothèque")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-            
-            Spacer()
-            
-            Text("\(artistes.flatMap(\.songs).count)")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.tertiary)
-                .monospacedDigit()
+        VStack(spacing: 8) {
+            // Title and count
+            HStack {
+                Text("Bibliothèque")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .textCase(.uppercase)
+
+                Spacer()
+
+                Text("\(filteredArtistes.flatMap(\.songs).count)")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+
+                // Refresh button
+                Button(action: rescanLibrary) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(isScanning ? .secondary : .primary)
+                        .rotationEffect(.degrees(isScanning ? 360 : 0))
+                        .animation(isScanning ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: isScanning)
+                }
+                .buttonStyle(.plain)
+                .disabled(isScanning)
+                .help("Actualiser la bibliothèque")
+            }
+
+            // Filter buttons
+            HStack(spacing: 6) {
+                ForEach(FilterType.allCases, id: \.self) { filter in
+                    Button(action: { selectedFilter = filter }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: filter.icon)
+                                .font(.system(size: 9))
+                            Text(filter.rawValue)
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(
+                            selectedFilter == filter ?
+                                Color.accentColor.opacity(0.15) :
+                                Color.clear
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .strokeBorder(
+                                    selectedFilter == filter ?
+                                        Color.accentColor :
+                                        Color.secondary.opacity(0.2),
+                                    lineWidth: 1
+                                )
+                        )
+                        .cornerRadius(6)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
@@ -85,6 +180,9 @@ struct ContentView: View {
                     ForEach(artist.songs) { song in
                         SongRow(song: song, isSelected: selectedSong?.id == song.id)
                             .tag(song)
+                            .contextMenu {
+                                statusContextMenu(for: song)
+                            }
                     }
                 } header: {
                     ArtistHeader(artist: artist, songCount: artist.songs.count)
@@ -144,43 +242,114 @@ struct ContentView: View {
             }
         )
     }
-    
+
+    // MARK: - Context Menu
+    @ViewBuilder
+    private func statusContextMenu(for song: Song) -> some View {
+        Button {
+            updateSongStatus(song, newStatus: nil)
+        } label: {
+            Label("Aucun statut", systemImage: "minus.circle")
+        }
+
+        Divider()
+
+        ForEach([SongStatus.enCours, SongStatus.termine], id: \.self) { status in
+            Button {
+                updateSongStatus(song, newStatus: status)
+            } label: {
+                Label(status.displayName, systemImage: status.icon)
+            }
+        }
+
+        Divider()
+
+        Button {
+            showInFinder(song)
+        } label: {
+            Label("Afficher dans le Finder", systemImage: "folder")
+        }
+    }
+
+    private func updateSongStatus(_ song: Song, newStatus: SongStatus?) {
+        // Update in metadata
+        let success = MetadataManager.shared.updateSongStatus(song, newStatus: newStatus)
+
+        guard success else {
+            errorMessage = "Impossible de sauvegarder le statut pour '\(song.title)'. Vérifiez les permissions du dossier."
+            showErrorAlert = true
+            return
+        }
+
+        // Rescan library to refresh UI
+        if let path = rootFolderURL {
+            artistes = scanLibrary(rootPath: path)
+        }
+    }
+
+    private func showInFinder(_ song: Song) {
+        NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: song.folderURL.path)
+    }
+
+    private func rescanLibrary() {
+        guard let path = rootFolderURL else { return }
+
+        isScanning = true
+
+        // Use a slight delay to allow the animation to start
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            artistes = scanLibrary(rootPath: path)
+            isScanning = false
+        }
+    }
+
     func scanLibrary(rootPath: String) -> [Artiste] {
         var artistes: [Artiste] = []
         let fileManager = FileManager.default
         let rootUrl = URL(fileURLWithPath: rootPath)
-        
+        let metadataManager = MetadataManager.shared
+
         do {
             let artistesFolders = try fileManager.contentsOfDirectory(at: rootUrl, includingPropertiesForKeys: nil)
-            
+
             for artisteFolder in artistesFolders {
                 guard artisteFolder.hasDirectoryPath else { continue }
-                
+
                 var actualArtiste = Artiste(
                     id: UUID(),
                     name: artisteFolder.lastPathComponent,
                     songs: []
                 )
-                
+
                 let songsFolders = try fileManager.contentsOfDirectory(
                     at: artisteFolder,
                     includingPropertiesForKeys: nil
                 )
-                
+
                 for songFolder in songsFolders {
                     guard songFolder.hasDirectoryPath else { continue }
-                    
+
                     let files = try fileManager.contentsOfDirectory(
                         at: songFolder,
                         includingPropertiesForKeys: nil,
                         options: .skipsHiddenFiles
                     )
-                    
+
                     let title = songFolder.lastPathComponent
                     let pdf = files.first { $0.pathExtension == "pdf" }
                     let video = files.first { ["mp4", "mov", "m4v"].contains($0.pathExtension.lowercased()) }
-                    
-                    let song = Song(id: UUID(), title: title, pdf: pdf, video: video)
+
+                    // Load metadata for stable ID and status
+                    let metadata = metadataManager.loadMetadata(from: songFolder)
+
+                    let song = Song(
+                        id: metadata.songId,
+                        title: title,
+                        pdf: pdf,
+                        video: video,
+                        status: metadata.status,
+                        folderURL: songFolder
+                    )
                     actualArtiste.songs.append(song)
                 }
                 
@@ -247,7 +416,7 @@ struct ArtistHeader: View {
 struct SongRow: View {
     let song: Song
     let isSelected: Bool
-    
+
     var body: some View {
         HStack(spacing: 10) {
             // Indicateurs de contenu
@@ -264,15 +433,22 @@ struct SongRow: View {
                 }
             }
             .frame(width: 28, alignment: .leading)
-            
+
             // Titre
             Text(song.title)
                 .font(.system(size: 13))
                 .foregroundStyle(isSelected ? .white : .primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            
+
             Spacer()
+
+            // Status badge
+            if let status = song.status {
+                Image(systemName: status.icon)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(isSelected ? .white.opacity(0.8) : status.color)
+            }
         }
         .padding(.vertical, 3)
         .contentShape(Rectangle())

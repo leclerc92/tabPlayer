@@ -474,7 +474,7 @@ struct VideoPlayerNSView: NSViewRepresentable {
         view.controlsStyle = .floating
         
         let speedMenu = NSMenu(title: "Vitesse")
-        let speeds: [Float] = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+        let speeds: [Float] = [0.25,0.4,0.5,0.6,0.75,1.0]
         for speed in speeds {
             let item = NSMenuItem(
                 title: speed == 1.0 ? "Normal (1x)" : "×\(speed)",
