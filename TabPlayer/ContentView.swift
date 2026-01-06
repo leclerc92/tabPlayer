@@ -226,6 +226,15 @@ struct ContentView: View {
                 } header: {
                     ArtistHeader(artist: artist, songCount: artist.songs.count)
                         .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation {
+                                if expandedArtists.contains(artist.id) {
+                                    expandedArtists.remove(artist.id)
+                                } else {
+                                    expandedArtists.insert(artist.id)
+                                }
+                            }
+                        }
                         .contextMenu {
                             Button(action: {
                                 selectedArtistForNewSong = artist
