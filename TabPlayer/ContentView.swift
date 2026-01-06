@@ -12,12 +12,14 @@ enum FilterType: String, CaseIterable {
     case all = "Tout"
     case enCours = "En cours"
     case termine = "Terminé"
+    case aucun = "Autres"
 
     var icon: String {
         switch self {
         case .all: return "music.note.list"
         case .enCours: return "music.note.list"
         case .termine: return "checkmark.circle.fill"
+        case .aucun: return "circle"
         }
     }
 }
@@ -50,6 +52,8 @@ struct ContentView: View {
                         return song.status == .enCours
                     case .termine:
                         return song.status == .termine
+                    case .aucun:
+                        return song.status == nil
                     }
                 }
 
